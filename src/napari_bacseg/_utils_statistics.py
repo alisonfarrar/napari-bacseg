@@ -13,6 +13,7 @@ import cv2
 import numpy as np
 import pandas as pd
 from skimage import exposure
+from skimage.filters import threshold_otsu
 
 
 def normalize99(X):
@@ -373,14 +374,34 @@ def get_layer_statistics(image, cell_mask, box, layer_names):
             cell_laplacian = int(cv2.Laplacian(cell_image_crop, cv2.CV_64F).var())
         except:
             cell_brightness = None
+            cell_max_brightness = None
+            cell_min_brightness = None
             cell_contrast = None
             cell_laplacian = None
+
+        try:
+            # Secondary step for Otsu thresholding
+            otsu_image = cell_image_crop.copy()
+            mask = cell_mask_crop.copy()
+            # Crop the image to where the mask is not 0
+            otsu_image = otsu_image[mask != 0]
+            thresh = threshold_otsu(otsu_image)
+            binary = otsu_image > thresh
+            # Find the mean pixel value where binary = 1
+            cell_brightness_otsu_1 = int(np.mean(otsu_image[binary == 1]))
+            # Find the mean pixel value where binary = 0
+            cell_brightness_otsu_0 = int(np.mean(otsu_image[binary == 0]))
+        except:
+            cell_brightness_otsu_1 = None
+            cell_brightness_otsu_0 = None
 
         stats = {"cell_brightness[" + layer + "]": cell_brightness,
                  "cell_contrast[" + layer + "]": cell_contrast,
                  "cell_laplacian[" + layer + "]": cell_laplacian,
                  "cell_max_brightness[" + layer + "]": cell_max_brightness,
-                 "cell_min_brightness[" + layer + "]": cell_min_brightness,}
+                 "cell_min_brightness[" + layer + "]": cell_min_brightness,
+                 "cell_brightness_otsu1[" + layer + "]": cell_brightness_otsu_1,
+                 "cell_brightness_otsu0[" + layer + "]": cell_brightness_otsu_0}
 
         layer_statistics = {**layer_statistics, **stats}
 
