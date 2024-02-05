@@ -22,6 +22,7 @@ import pandas as pd
 from napari.utils.notifications import show_info
 from PyQt5.QtCore import pyqtSignal, pyqtSlot
 from qtpy.QtCore import QObject, QRunnable, QThreadPool
+from PyQt5.QtGui import QFont
 from qtpy.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton, QRadioButton, QSlider, QTabWidget, QVBoxLayout, QWidget, )
 
 import napari_bacseg._utils
@@ -80,7 +81,7 @@ class BacSeg(QWidget, _picasso_utils):
         from napari_bacseg._utils_database import (_create_bacseg_database, _load_bacseg_database, _show_database_controls, populate_upload_combos, update_database_metadata, update_upload_combos, )
         from napari_bacseg._utils_interface_events import (_copymasktoall, _delete_active_image, _deleteallmasks, _doubeClickEvents, _imageControls, _modify_channel_changed, _modifyMode, _segmentationEvents, _viewerControls, )
         from napari_bacseg._utils_oufti import (_update_active_midlines, centre_oufti_midlines, generate_midlines, midline_edit_toggle, update_midlines, )
-        from napari_bacseg._utils_statistics import _compute_simple_cell_stats
+        from napari_bacseg._utils_statistics import _compute_simple_cell_stats, _filter_cells
         from napari_bacseg._utils_tiler import (fold_images, unfold_images, update_image_folds, )
         from napari_bacseg.bacseg_ui import Ui_tab_widget
 
@@ -115,6 +116,7 @@ class BacSeg(QWidget, _picasso_utils):
         self._show_database_controls = self.wrapper(_show_database_controls)
         self._doubeClickEvents = self.wrapper(_doubeClickEvents)
         self._compute_simple_cell_stats = self.wrapper(_compute_simple_cell_stats)
+        self._filter_cells = self.wrapper(_filter_cells)
 
         application_path = os.path.dirname(sys.executable)
         self.viewer = viewer
@@ -127,6 +129,9 @@ class BacSeg(QWidget, _picasso_utils):
         self.form = Ui_tab_widget()
         self.bacseg_ui = QTabWidget()
         self.form.setupUi(self.bacseg_ui)
+
+        for child in self.bacseg_ui.findChildren(QWidget):
+            child.setFont(QFont("Arial", 10))
 
         # add widget_gui layout to main layout
         self.layout().addWidget(self.bacseg_ui)
@@ -152,11 +157,13 @@ class BacSeg(QWidget, _picasso_utils):
         self.channel_mode = self.findChild(QComboBox, "nim_channel_mode")
         self.import_progressbar = self.findChild(QProgressBar, "import_progressbar")
         self.import_align = self.findChild(QCheckBox, "import_align")
-        self.label_modality = self.findChild(QComboBox, "label_modality")
-        self.label_stain = self.findChild(QComboBox, "label_stain")
-        self.label_stain_target = self.findChild(QComboBox, "label_stain_target")
+
+        self.img_modality = self.findChild(QComboBox, "img_modality")
+        self.img_light_source = self.findChild(QComboBox, "img_light_source")
+        self.img_stain = self.findChild(QComboBox, "img_stain")
+        self.img_stain_target = self.findChild(QComboBox, "img_stain_target")
+
         self.label_overwrite = self.findChild(QPushButton, "label_overwrite")
-        self.label_light_source = self.findChild(QComboBox, "label_light_source")
 
         # view tab controls + variables from Qt Desinger References
         self.unfold_tile_size = self.findChild(QComboBox, "unfold_tile_size")
@@ -262,6 +269,14 @@ class BacSeg(QWidget, _picasso_utils):
         self.modify_progressbar = self.findChild(QProgressBar, "modify_progressbar")
         self.modify_channel = self.findChild(QComboBox, "modify_channel")
 
+        self.filter_metric = self.findChild(QComboBox, "filter_metric")
+        self.filter_criteria = self.findChild(QComboBox, "filter_criteria")
+        self.filter_threshold = self.findChild(QLineEdit, "filter_threshold")
+        self.filter_mode = self.findChild(QComboBox, "filter_mode")
+        self.filter_report = self.findChild(QPushButton, "filter_report")
+        self.filter_remove = self.findChild(QPushButton, "filter_remove")
+        self.filter_ignore_edge = self.findChild(QCheckBox, "filter_ignore_edge")
+
         self.modify_auto_panzoom = self.findChild(QCheckBox, "modify_auto_panzoom")
         self.modify_add = self.findChild(QPushButton, "modify_add")
         self.modify_extend = self.findChild(QPushButton, "modify_extend")
@@ -300,6 +315,10 @@ class BacSeg(QWidget, _picasso_utils):
 
         # upload tab controls from Qt Desinger References
         self.database_path = ""
+        self.user_metadata_path = ""
+        self.user_metadata = None
+        self.expected_columns = None
+
         self.user_metadata_keys = 6
 
         self.metadata_columns = ["date_uploaded", "date_created", "date_modified", "file_name", "channel", "file_list", "channel_list", "segmentation_file", "segmentation_channel", "akseg_hash",
@@ -337,6 +356,7 @@ class BacSeg(QWidget, _picasso_utils):
         self.load_database = self.findChild(QPushButton, "load_database")
         self.display_database_path = self.findChild(QLineEdit, "display_database_path")
         self.upload_progressbar = self.findChild(QProgressBar, "upload_progressbar")
+        self.download_progressbar = self.findChild(QProgressBar, "download_progressbar")
         self.upload_tab = self.findChild(QWidget, "upload_tab")
         self.upload_segmentation_combo = self.findChild(QComboBox, "upload_segmentation_combo")
         self.upload_label_combo = self.findChild(QComboBox, "upload_label_combo")
@@ -505,6 +525,9 @@ class BacSeg(QWidget, _picasso_utils):
         self.find_previous.clicked.connect(self._sort_cells("previous"))
         self.modify_channel.currentTextChanged.connect(self._modify_channel_changed)
 
+        self.filter_report.clicked.connect(partial(self._filter_segmentations, remove=False))
+        self.filter_remove.clicked.connect(partial(self._filter_segmentations, remove=True))
+
         # export events
         self.export_active.clicked.connect(self._export("active"))
         self.export_all.clicked.connect(self._export("all"))
@@ -625,6 +648,41 @@ class BacSeg(QWidget, _picasso_utils):
 
         self.widget_notifications = True
 
+
+
+    def _check_number_string(self, string):
+
+        try:
+            float(string)
+            return True
+        except:
+            return False
+
+    def _filter_segmentations(self,viewer = None, remove = True):
+
+        try:
+
+            metric = self.filter_metric.currentText()
+            criteria = self.filter_criteria.currentText()
+            threshold = self.filter_threshold.text()
+            fov_mode = self.filter_mode.currentText()
+            ignore_edge = self.filter_ignore_edge.isChecked()
+
+            if self._check_number_string(threshold):
+
+                threshold = float(threshold)
+
+                if hasattr(self, "segLayer"):
+
+                    self._filter_cells(remove=remove, fov_mode=fov_mode, metric=metric,
+                        criteria=criteria, threshold=threshold, ignore_edge=ignore_edge)
+
+            else:
+                show_info("Thereshold must be a number")
+
+        except:
+            print(traceback.format_exc())
+            pass
 
 
     def _undrift_images(self):
@@ -892,15 +950,15 @@ class BacSeg(QWidget, _picasso_utils):
             if selected_layer not in ["Segmentations", "Nucleoid", "Classes", "center_lines", "Localisations", ]:
                 metadata = self.viewer.layers[selected_layer].metadata.copy()
 
-                label_modality = self.label_modality.currentText()
-                label_light_source = self.label_light_source.currentText()
-                label_stain = self.label_stain.currentText()
-                label_stain_target = self.label_stain_target.currentText()
+                img_modality = self.img_modality.currentText()
+                img_light_source = self.img_light_source.currentText()
+                img_stain = self.img_stain.currentText()
+                img_stain_target = self.img_stain_target.currentText()
 
-                if label_stain != "":
-                    channel = label_stain
+                if img_stain != "":
+                    channel = img_stain
                 else:
-                    channel = label_modality
+                    channel = img_modality
 
                 if channel in ["", None]:
                     channel = selected_layer
@@ -909,10 +967,10 @@ class BacSeg(QWidget, _picasso_utils):
 
                 for i in range(len(metadata)):
                     metadata[i]["channel"] = channel
-                    metadata[i]["modality"] = label_modality
-                    metadata[i]["light_source"] = label_light_source
-                    metadata[i]["stain"] = label_stain
-                    metadata[i]["stain_target"] = label_stain_target
+                    metadata[i]["modality"] = img_modality
+                    metadata[i]["light_source"] = img_light_source
+                    metadata[i]["stain"] = img_stain
+                    metadata[i]["stain_target"] = img_stain_target
 
                 self.viewer.layers[channel].metadata = metadata
 
@@ -1161,7 +1219,7 @@ class BacSeg(QWidget, _picasso_utils):
                         self._upload_bacseg_database = self.wrapper(_upload_bacseg_database)
 
                         worker = Worker(self._upload_bacseg_database, mode=mode)
-                        worker.signals.progress.connect(partial(self._Progresbar, progressbar="database"))
+                        worker.signals.progress.connect(partial(self._Progresbar, progressbar="database_upload"))
                         self.threadpool.start(worker)
             except:
                 pass
@@ -1194,7 +1252,7 @@ class BacSeg(QWidget, _picasso_utils):
                     else:
                         worker = Worker(self.read_bacseg_images, measurements=measurements, channels=channels, )
                         worker.signals.result.connect(self._process_import)
-                        worker.signals.progress.connect(partial(self._Progresbar, progressbar="database"))
+                        worker.signals.progress.connect(partial(self._Progresbar, progressbar="database_download"))
                         self.threadpool.start(worker)
 
         except:
@@ -1215,10 +1273,12 @@ class BacSeg(QWidget, _picasso_utils):
             self.import_progressbar.setValue(progress)
         if progressbar == "export":
             self.export_progressbar.setValue(progress)
-        # if progressbar == "cellpose":
-        #     self.cellpose_progressbar.setValue(progress)
-        if progressbar == "database":
+        if progressbar == "cellpose":
+            self.cellpose_progressbar.setValue(progress)
+        if progressbar == "database_upload":
             self.upload_progressbar.setValue(progress)
+        if progressbar == "database_download":
+            self.download_progressbar.setValue(progress)
         if progressbar == "modify":
             self.modify_progressbar.setValue(progress)
         if progressbar == "undrift":
@@ -1229,9 +1289,11 @@ class BacSeg(QWidget, _picasso_utils):
             self.import_progressbar.setValue(0)
             self.export_progressbar.setValue(0)
             self.cellpose_progressbar.setValue(0)
-            self.upload_progressbar.setValue(0)
             self.modify_progressbar.setValue(0)
             self.undrift_progressbar.setValue(0)
+            self.download_progressbar.setValue(0)
+            self.upload_progressbar.setValue(0)
+
             # self.picasso_progressbar.setValue(0)
 
     def _importDialog(self, paths=None):
@@ -1413,7 +1475,7 @@ class BacSeg(QWidget, _picasso_utils):
         current_fov = self.viewer.dims.current_step[0]
         chanel = self.cellpose_segchannel.currentText()
 
-        images = self.viewer.layers[chanel].data
+        images = self.viewer.layers[chanel].data.copy()
 
         image = [images[current_fov, :, :]]
 
@@ -1433,7 +1495,7 @@ class BacSeg(QWidget, _picasso_utils):
 
         channel = self.cellpose_segchannel.currentText()
 
-        images = self.viewer.layers[channel].data
+        images = self.viewer.layers[channel].data.copy()
 
         images = unstack_images(images)
 
@@ -1441,6 +1503,7 @@ class BacSeg(QWidget, _picasso_utils):
         worker.signals.result.connect(self._process_cellpose)
         worker.signals.progress.connect(partial(self._Progresbar, progressbar="cellpose"))
         self.threadpool.start(worker)
+
 
     def _updateSliderLabel(self, slider_name, label_name):
         self.slider = self.findChild(QSlider, slider_name)

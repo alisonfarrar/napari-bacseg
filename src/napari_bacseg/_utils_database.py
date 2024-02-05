@@ -100,6 +100,8 @@ def _load_bacseg_database(self, path=""):
                 self.display_database_path.setText(path)
                 self._show_database_controls(True)
 
+                show_info(f"Loaded BacSeg Database: {self.database_path}")
+
 
 def _show_database_controls(self, visible=True):
     all_database_controls = self.upload_tab.findChildren((QCheckBox, QComboBox, QLabel, QPushButton, QProgressBar, QTabWidget))
@@ -107,6 +109,8 @@ def _show_database_controls(self, visible=True):
     load_database_controls = ["create_database", "load_database", "display_database_path", "display_database_label", "database_io_title", ]
 
     [item.setVisible(visible) for item in all_database_controls if item.objectName() not in load_database_controls]
+
+
 
 
 def generate_txt_metadata(self, database_directory):
