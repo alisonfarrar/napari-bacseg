@@ -15,7 +15,7 @@ line_length = 79
 
 [project]
 name = "napari-bacseg"
-version = "1.0.16"
+version = "1.0.18"
 authors = [{ name="Piers Turner", email="piers.turner@physics.ox.ac.uk"},]
 description = "Bacterial segmentation and analysis platform than can inport/export files in multiple formats. Integrating many tools such as Cellpose, ColiCoords, Oufti/MicrobeTracker."
 readme = "README.md"
@@ -30,16 +30,16 @@ classifiers = [
 ]
 
 dependencies = [
-    "napari >= 0.4.17",
+    "napari[all] >= 0.4.19",
+    "torch",
+    "cellpose >= 3.0.1",
     "opencv-python",
     "picassosr == 0.6.5",
     "numpy",
     "pyqt5",
     "pyqt6",
     "qtpy",
-    "cellpose[all] >= 2.1.1",
     "scipy",
-    "torch",
     "natsort",
     "tqdm",
     "imagecodecs",

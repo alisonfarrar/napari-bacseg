@@ -18,55 +18,43 @@ from functools import partial
 import cv2
 import napari
 import numpy as np
-import pandas as pd
 from napari.utils.notifications import show_info
-from PyQt5.QtCore import pyqtSignal, pyqtSlot
-from qtpy.QtCore import QObject, QRunnable, QThreadPool
+from qtpy.QtCore import QThreadPool
 from PyQt5.QtGui import QFont
-from qtpy.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout, QHBoxLayout, QLabel, QLineEdit, QProgressBar, QPushButton, QRadioButton, QSlider, QTabWidget, QVBoxLayout, QWidget, )
 
-import napari_bacseg._utils
-from napari_bacseg._utils import align_image_channels, unstack_images
-from napari_bacseg._utils_worker import Worker
-from napari_bacseg._utils_picasso import _picasso_utils
+from qtpy.QtWidgets import (QCheckBox, QComboBox, QFileDialog, QFormLayout,
+    QLabel, QLineEdit, QProgressBar, QPushButton, QRadioButton, QSlider,
+    QTabWidget, QVBoxLayout, QWidget, )
 
-os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+from napari_bacseg.GUI.bacseg_ui import Ui_tab_widget
 
+from napari_bacseg.funcs.utils import _utils
+from napari_bacseg.funcs.IO.import_utils import _import_utils
+from napari_bacseg.funcs.IO.oni_utils import _oni_utils
+from napari_bacseg.funcs.IO.olympus_utils import _olympus_utils
+from napari_bacseg.funcs.IO.export_utils import _export_utils
+from napari_bacseg.funcs.database_utils import _database_utils
+from napari_bacseg.funcs.databaseIO_utils import _databaseIO
+from napari_bacseg.funcs.cellpose_utils import _cellpose_utils
+from napari_bacseg.funcs.tiler_utils import _tiler_utils
+from napari_bacseg.funcs.undrift_utils import _undrift_utils
+from napari_bacseg.funcs.IO.zeiss_utils import _zeiss_utils
+from napari_bacseg.funcs.events_utils import _events_utils
+from napari_bacseg.funcs.statistics_utils import _stats_utils
+from napari_bacseg.funcs.IO.oufti_utils import _oufti_utils
+from napari_bacseg.funcs.IO.imagej_utils import _imagej_utils
+from napari_bacseg.funcs.picasso_utils import _picasso_utils
 
+from napari_bacseg.funcs.threading_utils import Worker
 
+# os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
+class BacSeg(QWidget, _picasso_utils,
+    _utils, _import_utils, _export_utils,
+    _database_utils, _databaseIO, _cellpose_utils, _events_utils,
+    _tiler_utils, _zeiss_utils, _stats_utils, _oufti_utils, _imagej_utils,
+    _oni_utils, _olympus_utils, _undrift_utils):
 
-def external_function(self, arg1=None):
-    def event(viewer):
-        pass  # print(arg1)
-
-    return event
-
-
-class ExampleQWidget(QWidget):
-    def __init__(self, viewer: napari.Viewer):
-        super().__init__()
-        self.viewer = viewer
-
-        btn = QPushButton("Click me!")
-        # btn.clicked.connect(self._on_click)
-
-        self.setLayout(QHBoxLayout())
-        self.layout().addWidget(btn)
-
-        self.external_function = partial(external_function, self)
-
-        viewer.bind_key("n", self.on_pressed(arg1=1, arg2=2))
-        viewer.bind_key("e", self.external_function(arg1=1))
-
-    def on_pressed(self, arg1, arg2):
-        def _on_key_pressed(viewer):
-            pass  # print(arg1, arg2)
-
-        return _on_key_pressed
-
-
-class BacSeg(QWidget, _picasso_utils):
     """Widget allows selection of two labels layers and returns a new layer
     highlighing pixels whose values differ between the two layers."""
 
@@ -75,73 +63,36 @@ class BacSeg(QWidget, _picasso_utils):
 
         super().__init__()
 
-        # import functions
-        from napari_bacseg._utils import _manualImport, stack_images
-        from napari_bacseg._utils_cellpose import (_initialise_cellpose_model, _select_cellpose_save_directory, _select_cellpose_save_path, _select_custom_cellpose_model, train_cellpose_model, )
-        from napari_bacseg._utils_database import (_create_bacseg_database, _load_bacseg_database, _show_database_controls, populate_upload_combos, update_database_metadata, update_upload_combos, )
-        from napari_bacseg._utils_interface_events import (_copymasktoall, _delete_active_image, _deleteallmasks, _doubeClickEvents, _imageControls, _modify_channel_changed, _modifyMode, _segmentationEvents, _viewerControls, )
-        from napari_bacseg._utils_oufti import (_update_active_midlines, centre_oufti_midlines, generate_midlines, midline_edit_toggle, update_midlines, )
-        from napari_bacseg._utils_statistics import _compute_simple_cell_stats, _filter_cells
-        from napari_bacseg._utils_tiler import (fold_images, unfold_images, update_image_folds, )
-        from napari_bacseg.bacseg_ui import Ui_tab_widget
+        self.viewer = viewer
 
-        self.populate_upload_combos = self.wrapper(populate_upload_combos)
-        self.update_upload_combos = self.wrapper(update_upload_combos)
-        self.update_database_metadata = self.wrapper(update_database_metadata)
-        self.stack_image = self.wrapper(stack_images)
-        self._modifyMode = self.wrapper(_modifyMode)
-        self._viewerControls = self.wrapper(_viewerControls)
-        self._copymasktoall = self.wrapper(_copymasktoall)
-        self._deleteallmasks = self.wrapper(_deleteallmasks)
-        self._delete_active_image = self.wrapper(_delete_active_image)
-        self._imageControls = self.wrapper(_imageControls)
-        self._segmentationEvents = self.wrapper(_segmentationEvents)
-        self._modify_channel_changed = self.wrapper(_modify_channel_changed)
-        self._manualImport = self.wrapper(_manualImport)
-        self.train_cellpose_model = self.wrapper(train_cellpose_model)
-        self._initialise_cellpose_model = self.wrapper(_initialise_cellpose_model)
-        self._select_custom_cellpose_model = self.wrapper(_select_custom_cellpose_model)
-        self._select_cellpose_save_directory = self.wrapper(_select_cellpose_save_directory)
-        self._select_cellpose_save_path = self.wrapper(_select_cellpose_save_path)
-        self.unfold_images = self.wrapper(unfold_images)
-        self.fold_images = self.wrapper(fold_images)
-        self.update_image_folds = self.wrapper(update_image_folds)
-        self.midline_edit_toggle = self.wrapper(midline_edit_toggle)
-        self.centre_oufti_midlines = self.wrapper(centre_oufti_midlines)
-        self.generate_midlines = self.wrapper(generate_midlines)
-        self.update_midlines = self.wrapper(update_midlines)
-        self._update_active_midlines = self.wrapper(_update_active_midlines)
-        self._create_bacseg_database = self.wrapper(_create_bacseg_database)
-        self._load_bacseg_database = self.wrapper(_load_bacseg_database)
-        self._show_database_controls = self.wrapper(_show_database_controls)
-        self._doubeClickEvents = self.wrapper(_doubeClickEvents)
-        self._compute_simple_cell_stats = self.wrapper(_compute_simple_cell_stats)
-        self._filter_cells = self.wrapper(_filter_cells)
+        self.initialise_widget_ui()
+        self.initialise_controls()
+        self.initialise_pyqt_events()
+        self.initialise_keybindings()
+        self.initialise_viewer_events()
+        self.initialise_global_variables()
+        self.initialise_label_layers()
+
+        self.update_import_limit()
+
+        self.threadpool = QThreadPool()  # self.load_dev_data()
+
+    def initialise_widget_ui(self):
 
         application_path = os.path.dirname(sys.executable)
-        self.viewer = viewer
         self.setLayout(QVBoxLayout())
-
-        # ui_path = os.path.abspath(r"C:\napari-bacseg\src\napari_bacseg\bacseg_ui.ui")
-        # self.bacseg_ui = uic.loadUi(ui_path)
-        # command to refresh ui file: pyuic5 bacseg_ui.ui -o bacseg_ui.py
 
         self.form = Ui_tab_widget()
         self.bacseg_ui = QTabWidget()
         self.form.setupUi(self.bacseg_ui)
 
-        for child in self.bacseg_ui.findChildren(QWidget):
-            child.setFont(QFont("Arial", 10))
-
         # add widget_gui layout to main layout
         self.layout().addWidget(self.bacseg_ui)
 
-        # general references from Qt Desinger References
+    def initialise_controls(self):
+
         self.tab_widget = self.findChild(QTabWidget, "tab_widget")
 
-        # import controls from Qt Desinger References
-        self.path_list = []
-        self.active_import_mode = ""
         self.import_mode = self.findChild(QComboBox, "import_mode")
         self.import_filemode = self.findChild(QComboBox, "import_filemode")
         self.import_precision = self.findChild(QComboBox, "import_precision")
@@ -150,7 +101,6 @@ class BacSeg(QWidget, _picasso_utils):
         self.import_limit_label = self.findChild(QLabel, "import_limit_label")
         self.import_append_mode = self.findChild(QComboBox, "import_append_mode")
 
-        # self.clear_previous = self.findChild(QCheckBox, "import_clear_previous")
         self.autocontrast = self.findChild(QCheckBox, "import_auto_contrast")
         self.import_multiframe_mode = self.findChild(QComboBox, "import_multiframe_mode")
         self.import_crop_mode = self.findChild(QComboBox, "import_crop_mode")
@@ -215,12 +165,6 @@ class BacSeg(QWidget, _picasso_utils):
         self.zoom_magnification = self.findChild(QComboBox, "zoom_magnification")
         self.zoom_apply = self.findChild(QPushButton, "zoom_apply")
 
-        # cellpose controls + variables from Qt Desinger References
-        self.cellpose_segmentation = False
-        self.cellpose_model = None
-        self.cellpose_custom_model_path = ""
-        self.cellpose_train_model_path = ""
-        self.cellpose_log_file = None
         self.cellpose_select_custom_model = self.findChild(QPushButton, "cellpose_select_custom_model")
         self.cellpose_segmodel = self.findChild(QComboBox, "cellpose_segmodel")
         self.cellpose_trainmodel = self.findChild(QComboBox, "cellpose_trainmodel")
@@ -250,11 +194,6 @@ class BacSeg(QWidget, _picasso_utils):
         self.cellpose_invert_images = self.findChild(QCheckBox, "cellpose_invert_images")
         self.cellpose_auto_classify = self.findChild(QCheckBox, "cellpose_auto_classify")
 
-        # modify tab controls + variables from Qt Desinger References
-        self.interface_mode = "panzoom"
-        self.segmentation_mode = "add"
-        self.class_mode = "single"
-        self.class_colour = 1
         self.modify_panzoom = self.findChild(QPushButton, "modify_panzoom")
         self.modify_segment = self.findChild(QPushButton, "modify_segment")
         self.modify_classify = self.findChild(QPushButton, "modify_classify")
@@ -313,27 +252,6 @@ class BacSeg(QWidget, _picasso_utils):
         self.set_debris_4 = self.findChild(QPushButton, "set_debris_4")
         self.set_debris_5 = self.findChild(QPushButton, "set_debris_5")
 
-        # upload tab controls from Qt Desinger References
-        self.database_path = ""
-        self.user_metadata_path = ""
-        self.user_metadata = None
-        self.expected_columns = None
-
-        self.user_metadata_keys = 6
-
-        self.metadata_columns = ["date_uploaded", "date_created", "date_modified", "file_name", "channel", "file_list", "channel_list", "segmentation_file", "segmentation_channel", "akseg_hash",
-            "user_initial", "content", "microscope", "modality", "source", "strain", "phenotype", "stain", "stain_target", "antibiotic", "treatment time (mins)", "antibiotic concentration",
-            "mounting method", "protocol", "folder", "parent_folder", "num_segmentations", "image_laplacian", "image_focus", "image_debris", "segmented", "labelled", "segmentation_curated",
-            "label_curated", "posX", "posY", "posZ", "image_load_path", "image_save_path", "mask_load_path", "mask_save_path", "label_load_path", "label_save_path", ]
-
-        user_key_list = np.arange(1, self.user_metadata_keys + 1).tolist()
-        user_key_list.reverse()
-
-        for key in user_key_list:
-            user_key = f"user_meta{key}"
-            self.metadata_columns.insert(22, str(user_key))
-            setattr(self, f"upload_usermeta{key}", self.findChild(QComboBox, f"upload_usermeta{key}"), )
-
         self.upload_initial = self.findChild(QComboBox, "upload_initial")
         self.upload_content = self.findChild(QComboBox, "upload_content")
         self.upload_microscope = self.findChild(QComboBox, "upload_microscope")
@@ -373,8 +291,6 @@ class BacSeg(QWidget, _picasso_utils):
 
         self.image_metadata_controls = self.findChild(QFormLayout, "image_metadata_controls")
 
-        self._show_database_controls(False)
-
         # oufti tab controls
         self.oufti_generate_all_midlines = self.findChild(QPushButton, "oufti_generate_all_midlines")
         self.oufti_generate_active_midlines = self.findChild(QPushButton, "oufti_generate_active_midlines")
@@ -388,6 +304,8 @@ class BacSeg(QWidget, _picasso_utils):
 
         # export tab controls from Qt Desinger References
         self.export_channel = self.findChild(QComboBox, "export_channel")
+        self.export_multi_channel_mode = self.findChild(QComboBox, "export_multi_channel_mode")
+        self.export_multi_channel_mode_label = self.findChild(QLabel, "export_multi_channel_mode_label")
         self.export_mode = self.findChild(QComboBox, "export_mode")
         self.export_location = self.findChild(QComboBox, "export_location")
         self.export_modifier = self.findChild(QLineEdit, "export_modifier")
@@ -431,18 +349,17 @@ class BacSeg(QWidget, _picasso_utils):
         self.export_overwrite_setting = self.findChild(QCheckBox, "export_overwrite_setting")
         self.export_directory = ""
 
+
+    def initialise_pyqt_events(self):
+
         # import events
         self.autocontrast.stateChanged.connect(self._autoContrast)
         self.import_import.clicked.connect(self._importDialog)
         self.label_overwrite.clicked.connect(self.overwrite_channel_info)
         self.import_mode.currentIndexChanged.connect(self._set_available_multiframe_modes)
 
-        # view events
         self.fold.clicked.connect(self.fold_images)
         self.unfold.clicked.connect(self.unfold_images)
-        self.tiler_object = None
-        self.tile_dict = {"Segmentations": [], "Classes": [], "Nucleoid": []}
-        self.unfolded = False
 
         self.align_active_image.clicked.connect(partial(self._align_images, mode="active"))
         self.align_all_images.clicked.connect(partial(self._align_images, mode="all"))
@@ -551,6 +468,7 @@ class BacSeg(QWidget, _picasso_utils):
         self.database_download.clicked.connect(self._downloadDatabase)
         self.create_database.clicked.connect(self._create_bacseg_database)
         self.load_database.clicked.connect(self._load_bacseg_database)
+        self.store_metadata.clicked.connect(self.update_database_metadata)
 
         self.picasso_detect.clicked.connect(self.detect_picasso_localisations)
         self.picasso_fit.clicked.connect(self.fit_picasso_localisations)
@@ -565,25 +483,15 @@ class BacSeg(QWidget, _picasso_utils):
         self.filter_metadata.clicked.connect(self.update_upload_combos)
         self.reset_metadata.clicked.connect(self.populate_upload_combos)
 
-        self.updating_combos = False
-
-        self.store_metadata.clicked.connect(self.update_database_metadata)
-
-        # viewer event that call updateFileName when the slider is modified
-        self.contours = []
         self.viewer.dims.events.current_step.connect(self._sliderEvent)
 
-        # self.segImage = self.viewer.add_image(np.zeros((1,100,100),dtype=np.uint16),name="Image")
-        self.class_colours = {1: (255 / 255, 255 / 255, 255 / 255, 1), 2: (0 / 255, 255 / 255, 0 / 255, 1), 3: (0 / 255, 170 / 255, 255 / 255, 1), 4: (170 / 255, 0 / 255, 255 / 255, 1), 5: (
-        255 / 255, 170 / 255, 0 / 255, 1), 6: (255 / 255, 0 / 255, 0 / 255, 1), }
+        self.import_filemode.currentIndexChanged.connect(self.update_import_limit)
+        self.import_mode.currentIndexChanged.connect(self.update_import_limit)
 
-        self.classLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=0.25, name="Classes", color=self.class_colours, metadata={0: {"image_name": ""}}, visible=False, )
-        self.nucLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=1, name="Nucleoid", metadata={0: {"image_name": ""}}, )
-        self.segLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=1, name="Segmentations", metadata={0: {"image_name": ""}}, )
+        self.export_channel.currentIndexChanged.connect(self.update_export_options)
 
-        self.segLayer.contour = 1
+    def initialise_keybindings(self):
 
-        # keyboard events, only triggered when viewer is not empty (an image is loaded/active)
         self.viewer.bind_key(key="a", func=self._modifyMode(mode="add"), overwrite=True)
         self.viewer.bind_key(key="e", func=self._modifyMode(mode="extend"), overwrite=True)
         self.viewer.bind_key(key="j", func=self._modifyMode(mode="join"), overwrite=True)
@@ -614,7 +522,7 @@ class BacSeg(QWidget, _picasso_utils):
         self.viewer.bind_key(key="Control-i", func=self._delete_active_image(mode="active"), overwrite=True, )
         self.viewer.bind_key(key="Control-Shift-i", func=self._delete_active_image(mode="other"), overwrite=True, )
 
-        self.viewer.bind_key(key="Control-l", func=self._downloadDatabase(), overwrite=True)
+        # self.viewer.bind_key(key="Control-l", func=self._downloadDatabase(), overwrite=True)
         self.viewer.bind_key(key="Control-u", func=self._uploadDatabase(mode="active"), overwrite=True, )
         self.viewer.bind_key(key="Control-Shift-u", func=self._uploadDatabase(mode="all"), overwrite=True, )
         #
@@ -628,26 +536,100 @@ class BacSeg(QWidget, _picasso_utils):
         self.viewer.bind_key(key="Alt-Up", func=self._manual_align_channels("up", mode="all"), overwrite=True, )
         self.viewer.bind_key(key="Alt-Down", func=self._manual_align_channels("down", mode="all"), overwrite=True, )
 
-        self.import_filemode.currentIndexChanged.connect(self.update_import_limit)
-        self.import_mode.currentIndexChanged.connect(self.update_import_limit)
-        self.update_import_limit()
+    def initialise_viewer_events(self):
 
-        # mouse events
-        self.segLayer.mouse_drag_callbacks.append(self._segmentationEvents)
-        self.nucLayer.mouse_drag_callbacks.append(self._segmentationEvents)
-
-        # self.segLayer.mouse_move_callbac1ks.append(self._zoomEvents)
-        self.segLayer.mouse_double_click_callbacks.append(self._doubeClickEvents)
-
-        # viewer events
         self.viewer.layers.events.inserted.connect(self._manualImport)
         self.viewer.layers.events.removed.connect(self._updateSegmentationCombo)
         self.viewer.layers.selection.events.changed.connect(self._updateFileName)
 
-        self.threadpool = QThreadPool()  # self.load_dev_data()
+    def initialise_global_variables(self):
+
+        # import controls from Qt Desinger References
+        self.path_list = []
+        self.active_import_mode = ""
+
+        # cellpose controls + variables from Qt Desinger References
+        self.cellpose_segmentation = False
+        self.cellpose_model = None
+        self.cellpose_custom_model_path = ""
+        self.cellpose_train_model_path = ""
+        self.cellpose_log_file = None
+
+        # modify tab controls + variables from Qt Desinger References
+        self.interface_mode = "panzoom"
+        self.segmentation_mode = "add"
+        self.class_mode = "single"
+        self.class_colour = 1
+
+        # upload tab controls from Qt Desinger References
+        self.database_path = ""
+        self.user_metadata_path = ""
+        self.user_metadata = None
+        self.expected_columns = None
+
+        self.user_metadata_keys = 6
+
+        self.metadata_columns = ["date_uploaded", "date_created", "date_modified", "file_name", "channel", "file_list", "channel_list", "segmentation_file", "segmentation_channel", "akseg_hash",
+            "user_initial", "content", "microscope", "modality", "source", "strain", "phenotype", "stain", "stain_target", "antibiotic", "treatment time (mins)", "antibiotic concentration",
+            "mounting method", "protocol", "folder", "parent_folder", "num_segmentations", "image_laplacian", "image_focus", "image_debris", "segmented", "labelled", "segmentation_curated",
+            "label_curated", "posX", "posY", "posZ", "image_load_path", "image_save_path", "mask_load_path", "mask_save_path", "label_load_path", "label_save_path", ]
+
+        user_key_list = np.arange(1, self.user_metadata_keys + 1).tolist()
+        user_key_list.reverse()
+
+        for key in user_key_list:
+            user_key = f"user_meta{key}"
+            self.metadata_columns.insert(22, str(user_key))
+            setattr(self, f"upload_usermeta{key}", self.findChild(QComboBox, f"upload_usermeta{key}"), )
+
+        self.tiler_object = None
+        self.tile_dict = {"Segmentations": [], "Classes": [], "Nucleoid": []}
+        self.unfolded = False
+        self.updating_combos = False
+        self.contours = []
+
+        self.class_colours = {1: (255 / 255, 255 / 255, 255 / 255, 1), 2: (0 / 255, 255 / 255, 0 / 255, 1), 3: (0 / 255, 170 / 255, 255 / 255, 1), 4: (170 / 255, 0 / 255, 255 / 255, 1), 5: (
+        255 / 255, 170 / 255, 0 / 255, 1), 6: (255 / 255, 0 / 255, 0 / 255, 1), }
 
         self.widget_notifications = True
 
+        self._show_database_controls(False)
+
+    def initialise_label_layers(self):
+
+        self.classLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=0.25, name="Classes", color=self.class_colours, metadata={0: {"image_name": ""}}, visible=False, )
+        self.nucLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=1, name="Nucleoid", metadata={0: {"image_name": ""}}, )
+        self.segLayer = self.viewer.add_labels(np.zeros((1, 100, 100), dtype=np.uint16), opacity=1, name="Segmentations", metadata={0: {"image_name": ""}}, )
+
+        self.segLayer.mouse_drag_callbacks.append(self._segmentationEvents)
+        self.nucLayer.mouse_drag_callbacks.append(self._segmentationEvents)
+        self.segLayer.mouse_double_click_callbacks.append(self._doubeClickEvents)
+
+        self.segLayer.contour = 1
+
+    def update_export_options(self):
+
+        try:
+
+            export_channel = self.export_channel.currentText()
+
+            if export_channel == "Multi Channel":
+                self.export_multi_channel_mode.setEnabled(True)
+                self.export_multi_channel_mode_label.setEnabled(True)
+
+                self.export_multi_channel_mode.setVisible(True)
+                self.export_multi_channel_mode_label.setVisible(True)
+
+                self.export_multi_channel_mode
+            else:
+                self.export_multi_channel_mode.setEnabled(False)
+                self.export_multi_channel_mode_label.setEnabled(False)
+
+                self.export_multi_channel_mode.setVisible(False)
+                self.export_multi_channel_mode_label.setVisible(False)
+
+        except:
+            print(traceback.format_exc())
 
 
     def _check_number_string(self, string):
@@ -684,128 +666,6 @@ class BacSeg(QWidget, _picasso_utils):
             print(traceback.format_exc())
             pass
 
-
-    def _undrift_images(self):
-        worker = Worker(self._undrift)
-        worker.signals.progress.connect(partial(self._Progresbar, progressbar="undrift"))
-        worker.signals.finished.connect(self._undrift_postprocesing)
-        self.threadpool.start(worker)
-
-    @staticmethod
-    def _undrift_preprocesing(img):
-        from skimage import exposure
-
-        if np.max(img) > 0:
-            img = img.copy()
-            v_min, v_max = np.percentile(img[img != 0], (0.1, 99.9))
-            img = exposure.rescale_intensity(img, in_range=(v_min, v_max))
-
-        img = cv2.GaussianBlur(img, (5, 5), 0)
-        _, img = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-
-        return img
-
-    def _undrift_postprocesing(self):
-        try:
-            # remove borders
-            undrift_channel = self.undrift_channel.currentText()
-
-            boundary_image = np.min(self.viewer.layers[undrift_channel].data.copy(), axis=0)
-            boundary, _ = self._find_shifted_boundary(boundary_image)
-
-            layer_names = [layer.name for layer in self.viewer.layers if layer.name not in ["center_lines"]]
-
-            for layer in layer_names:
-                self.viewer.layers[layer].data = self.viewer.layers[layer].data[:, boundary[1]: boundary[3], boundary[0]: boundary[2]]
-                image_shape = self.viewer.layers[layer].data.shape
-
-                for i in range(image_shape[0]):
-                    if layer not in ["center_lines"]:
-                        try:
-                            self.viewer.layers[layer].metadata[i]["dims"] = [image_shape[-1], image_shape[-2], ]
-                            self.viewer.layers[layer].metadata[i]["crop"] = [0, image_shape[-2], 0, image_shape[-1], ]
-                        except:
-                            pass
-
-            # refresh active layer
-            self.viewer.layers[self.undrift_channel.currentText()].refresh()
-
-            # reset viewer
-            self.viewer.reset_view()
-
-        except:
-            print(traceback.format_exc())
-
-    def _find_shifted_boundary(self, image):
-        x0, y0, x1, y1 = 0, 0, image.shape[1], image.shape[0]
-
-        # Find non-black pixels
-        coords = np.column_stack(np.where(image > 0))
-
-        if coords.size != 0:
-            y_centre_slice = image[:, int(image.shape[1] / 2)]
-            x_centre_slice = image[int(image.shape[0] / 2), :]
-
-            y0 = np.where(y_centre_slice > 0)[0][0]
-            y1 = np.where(y_centre_slice > 0)[0][-1]
-            x0 = np.where(x_centre_slice > 0)[0][0]
-            x1 = np.where(x_centre_slice > 0)[0][-1]
-
-            if y1 - y0 > 10 and x1 - x0 > 10:
-                if y0 < 0:
-                    y0 = 0
-                if y1 > image.shape[0]:
-                    y1 = image.shape[0]
-                if x0 < 0:
-                    x0 = 0
-                if x1 > image.shape[1]:
-                    x1 = image.shape[1]
-
-        image_shape = y1 - y0, x1 - x0
-
-        return [x0, y0, x1, y1], image_shape
-
-    def _undrift(self, progress_callback):
-        try:
-            import scipy
-            from skimage.registration import phase_cross_correlation
-
-            layer_names = [layer.name for layer in self.viewer.layers if layer.name not in ["Segmentations", "Nucleoid", "Classes", "center_lines", "Localisations", ]]
-
-            if layer_names != []:
-                shift_list = []
-
-                undrift_channel = self.undrift_channel.currentText()
-
-                image_shape = self.viewer.layers[undrift_channel].data.shape
-
-                if len(image_shape) == 3:
-                    if image_shape[0] > 1:
-                        anchor_binary = self._undrift_preprocesing(self.viewer.layers[undrift_channel].data[0])
-
-                        for i in range(image_shape[0] - 1):
-                            progress = int((i + 1) / (image_shape[0] - 1) * 100)
-                            progress_callback.emit(progress)
-
-                            target_image = self.viewer.layers[undrift_channel].data[i + 1]
-                            target_binary = self._undrift_preprocesing(target_image)
-
-                            shift, error, diffphase = phase_cross_correlation(anchor_binary, target_binary, upsample_factor=100, )
-
-                            shift_list.append(shift)
-
-                        for layer in layer_names:
-                            for i in range(image_shape[0] - 1):
-                                shifted_image = scipy.ndimage.shift(self.viewer.layers[layer].data[i + 1], shift_list[i], cval=-1, )
-
-                                self.viewer.layers[layer].data[i + 1] = shifted_image
-
-                        # boundary_image = np.min(self.viewer.layers[undrift_channel].data.copy(), axis=0)  # boundary, _ = self._find_shifted_boundary(boundary_image)  #  # layer_names = [layer.name for layer in self.viewer.layers if layer.name not in ["center_lines"]]  #  # for layer in layer_names:  #     self.viewer.layers[layer].data = self.viewer.layers[layer].data[:, boundary[1]:boundary[3], boundary[0]:boundary[2]]  #     frame = self.viewer.layers[layer].data[0].copy()  #  #     for i in range(image_shape[0] - 1):  #         if layer not in ["Segmentations", "Nucleoid", "Classes"]:  #             self.viewer.layers[layer].metadata[i]["dims"] = [frame.shape[-1], frame.shape[-2]]  #             self.viewer.layers[layer].metadata[i]["crop"] = [0, frame.shape[-2], 0, frame.shape[-1]]
-
-                return
-
-        except:
-            print(traceback.format_exc())
 
     def _set_available_multiframe_modes(self):
         multiframe_items = [self.import_multiframe_mode.itemText(i) for i in range(self.import_multiframe_mode.count())]
@@ -940,6 +800,7 @@ class BacSeg(QWidget, _picasso_utils):
         return func
 
     def overwrite_channel_info(self):
+
         all_layers = [layer.name for layer in self.viewer.layers]
         selected_layers = [layer.name for layer in self.viewer.layers.selection]
 
@@ -1008,11 +869,6 @@ class BacSeg(QWidget, _picasso_utils):
             if os.path.isdir(path):
                 path = os.path.abspath(path)
 
-                from napari_bacseg._utils_statistics import (get_cell_statistics, process_cell_statistics, )
-
-                self.get_cell_statistics = self.wrapper(get_cell_statistics)
-                self.process_cell_statistics = self.wrapper(process_cell_statistics)
-
                 worker = Worker(self.get_cell_statistics, mode=mode, pixel_size=pixel_size, colicoords_dir=colicoords_dir, )
                 worker.signals.progress.connect(partial(self._Progresbar, progressbar="export"))
                 worker.signals.result.connect(partial(self.process_cell_statistics, path=path))
@@ -1020,8 +876,8 @@ class BacSeg(QWidget, _picasso_utils):
                 cell_data = worker.result()
 
                 if self.export_colicoords_mode.currentIndex() != 0:
-                    from napari_bacseg._utils_colicoords import run_colicoords
 
+                    from napari_bacseg.funcs.colicoords_utils import run_colicoords
                     self.run_colicoords = self.wrapper(run_colicoords)
 
                     worker = Worker(self.run_colicoords, cell_data=cell_data, colicoords_channel=colicoords_channel, pixel_size=pixel_size, statistics=True, multithreaded=multithreaded, )
@@ -1184,13 +1040,6 @@ class BacSeg(QWidget, _picasso_utils):
         mask_stack = self.segLayer.data
         mask = mask_stack[current_fov, :, :].copy()
 
-        from napari_bacseg._utils_colicoords import (process_colicoords, run_colicoords, )
-        from napari_bacseg._utils_statistics import get_cell_statistics
-
-        self.get_cell_statistics = self.wrapper(get_cell_statistics)
-        self.run_colicoords = self.wrapper(run_colicoords)
-        self.process_colicoords = self.wrapper(process_colicoords)
-
         colicoords_dir = os.path.join(tempfile.gettempdir(), "colicoords")
 
         worker = Worker(self.get_cell_statistics, mode="active", pixel_size=pixel_size, colicoords_dir=colicoords_dir, )
@@ -1206,6 +1055,7 @@ class BacSeg(QWidget, _picasso_utils):
 
     def _uploadDatabase(self, viewer=None, mode=""):
         def _event(viewer):
+            print(True)
             try:
                 if (self.database_path != "" and os.path.exists(self.database_path) == True):
                     if self.unfolded == True:
@@ -1214,14 +1064,15 @@ class BacSeg(QWidget, _picasso_utils):
                     if self.upload_initial.currentText() in ["", "Required for upload", ]:
                         show_info("Please select the user initial.")
                     else:
-                        from napari_bacseg._utils_database_IO import (_upload_bacseg_database, )
 
-                        self._upload_bacseg_database = self.wrapper(_upload_bacseg_database)
+                        worker = Worker(self.backup_user_metadata)
+                        self.threadpool.start(worker)
 
                         worker = Worker(self._upload_bacseg_database, mode=mode)
                         worker.signals.progress.connect(partial(self._Progresbar, progressbar="database_upload"))
                         self.threadpool.start(worker)
             except:
+                print(traceback.format_exc())
                 pass
 
         return _event
@@ -1236,10 +1087,6 @@ class BacSeg(QWidget, _picasso_utils):
                     show_info("Please select the user initial.")
 
                 else:
-                    from napari_bacseg._utils_database_IO import (get_filtered_database_metadata, read_bacseg_images, )
-
-                    self.get_filtered_database_metadata = self.wrapper(get_filtered_database_metadata)
-                    self.read_bacseg_images = self.wrapper(read_bacseg_images)
 
                     self.active_import_mode = "BacSeg"
 
@@ -1250,6 +1097,7 @@ class BacSeg(QWidget, _picasso_utils):
                             show_info("no matching database files found")
 
                     else:
+
                         worker = Worker(self.read_bacseg_images, measurements=measurements, channels=channels, )
                         worker.signals.result.connect(self._process_import)
                         worker.signals.progress.connect(partial(self._Progresbar, progressbar="database_download"))
@@ -1333,7 +1181,6 @@ class BacSeg(QWidget, _picasso_utils):
 
         else:
             if import_mode == "Images":
-                self.import_images = self.wrapper(napari_bacseg._utils.import_images)
 
                 worker = Worker(self.import_images, file_paths=paths)
                 worker.signals.result.connect(self._process_import)
@@ -1341,8 +1188,6 @@ class BacSeg(QWidget, _picasso_utils):
                 self.threadpool.start(worker)
 
             if import_mode == "NanoImager Data":
-                self.read_nim_directory = self.wrapper(napari_bacseg._utils.read_nim_directory)
-                self.read_nim_images = self.wrapper(napari_bacseg._utils.read_nim_images)
 
                 measurements, file_paths, channels = self.read_nim_directory(paths)
 
@@ -1352,27 +1197,26 @@ class BacSeg(QWidget, _picasso_utils):
                 self.threadpool.start(worker)
 
             if import_mode == "Mask (.tif) Segmentation(s)":
-                self.import_masks = self.wrapper(napari_bacseg._utils.import_masks)
+
                 self.import_masks(paths, file_extension=".tif")
                 self._autoClassify()
 
             if import_mode == "Cellpose (.npy) Segmentation(s)":
-                self.import_masks = self.wrapper(napari_bacseg._utils.import_masks)
+
                 self.import_masks(paths, file_extension=".npy")
                 self._autoClassify()
 
             if import_mode == "Oufti (.mat) Segmentation(s)":
-                self.import_masks = self.wrapper(napari_bacseg._utils.import_masks)
+
                 self.import_masks(paths, file_extension=".mat")
                 self._autoClassify()
 
             if import_mode == "JSON (.txt) Segmentation(s)":
-                self.import_masks = self.wrapper(napari_bacseg._utils.import_masks)
+
                 self.import_masks(paths, file_extension=".txt")
                 self._autoClassify()
 
             if import_mode == "ImageJ files(s)":
-                self.import_imagej = self.wrapper(napari_bacseg._utils.import_imagej)
 
                 worker = Worker(self.import_imagej, paths=paths)
                 worker.signals.result.connect(self._process_import)
@@ -1380,11 +1224,8 @@ class BacSeg(QWidget, _picasso_utils):
                 self.threadpool.start(worker)
 
             if import_mode == "ScanR Data":
-                from napari_bacseg._utils import (read_scanr_directory, read_scanr_images, )
 
-                self.read_scanr_images = self.wrapper(read_scanr_images)
-
-                measurements, file_paths, channels = read_scanr_directory(self, paths)
+                measurements, file_paths, channels = self.read_scanr_directory(paths)
 
                 worker = Worker(self.read_scanr_images, measurements=measurements, channels=channels, )
                 worker.signals.result.connect(self._process_import)
@@ -1393,12 +1234,8 @@ class BacSeg(QWidget, _picasso_utils):
 
             if import_mode == "Zeiss (.czi) Data":
                 try:
-                    from napari_bacseg._utils_zeiss import (get_zeiss_measurements, read_zeiss_image_files, )
 
-                    self.get_zeiss_measurements = self.wrapper(get_zeiss_measurements)
-                    self.read_zeiss_image_files = self.wrapper(read_zeiss_image_files)
-
-                    (zeiss_measurements, channel_names, num_measurements,) = get_zeiss_measurements(self, paths)
+                    (zeiss_measurements, channel_names, num_measurements,) = self.get_zeiss_measurements(paths)
 
                     worker = Worker(self.read_zeiss_image_files, zeiss_measurements=zeiss_measurements, channel_names=channel_names, num_measurements=num_measurements, )
                     worker.signals.result.connect(self._process_import)
@@ -1420,7 +1257,6 @@ class BacSeg(QWidget, _picasso_utils):
                     execute_export = False
 
             if execute_export == True:
-                self.export_stacks = self.wrapper(napari_bacseg._utils.export_stacks)
 
                 worker = Worker(self.export_stacks, mode=mode)
                 worker.signals.progress.connect(partial(self._Progresbar, progressbar="export"))
@@ -1443,7 +1279,6 @@ class BacSeg(QWidget, _picasso_utils):
                     execute_export = False
 
             if execute_export == True:
-                self.export_files = self.wrapper(napari_bacseg._utils.export_files)
 
                 worker = Worker(self.export_files, mode=mode)
                 worker.signals.progress.connect(partial(self._Progresbar, progressbar="export"))
@@ -1455,10 +1290,6 @@ class BacSeg(QWidget, _picasso_utils):
         if self.unfolded == True:
             self.fold_images()
 
-        from napari_bacseg._utils_cellpose import train_cellpose_model
-
-        self.train_cellpose_model = self.wrapper(train_cellpose_model)
-
         worker = Worker(self.train_cellpose_model)
         worker.signals.progress.connect(partial(self._Progresbar, progressbar="cellpose_train"))
         self.threadpool.start(worker)
@@ -1467,13 +1298,8 @@ class BacSeg(QWidget, _picasso_utils):
         if self.unfolded == True:
             self.fold_images()
 
-        from napari_bacseg._utils_cellpose import (_process_cellpose, _run_cellpose, )
-
-        self._run_cellpose = self.wrapper(_run_cellpose)
-        self._process_cellpose = self.wrapper(_process_cellpose)
-
-        current_fov = self.viewer.dims.current_step[0]
-        chanel = self.cellpose_segchannel.currentText()
+        current_fov = int(self.viewer.dims.current_step[0])
+        chanel = str(self.cellpose_segchannel.currentText())
 
         images = self.viewer.layers[chanel].data.copy()
 
@@ -1488,16 +1314,10 @@ class BacSeg(QWidget, _picasso_utils):
         if self.unfolded == True:
             self.fold_images()
 
-        from napari_bacseg._utils_cellpose import (_process_cellpose, _run_cellpose, )
-
-        self._run_cellpose = self.wrapper(_run_cellpose)
-        self._process_cellpose = self.wrapper(_process_cellpose)
-
-        channel = self.cellpose_segchannel.currentText()
-
+        channel = str(self.cellpose_segchannel.currentText())
         images = self.viewer.layers[channel].data.copy()
 
-        images = unstack_images(images)
+        images = self.unstack_images(images)
 
         worker = Worker(self._run_cellpose, images=images)
         worker.signals.result.connect(self._process_cellpose)
@@ -1542,7 +1362,7 @@ class BacSeg(QWidget, _picasso_utils):
 
         self.export_channel.clear()
         export_layers = layer_names
-        export_layers.extend(["All Channels (Stack)", "All Channels (Horizontal Stack)", "All Channels (Vertical Stack)", "First Three Channels (RGB)", ])
+        export_layers.extend(["Multi Channel", ])
         self.export_channel.addItems(export_layers)
 
         self.refine_channel.clear()
@@ -1705,12 +1525,10 @@ class BacSeg(QWidget, _picasso_utils):
             else:
                 nmasks = []
 
-            from napari_bacseg._utils import stack_images
-
-            new_image_stack, new_metadata = stack_images(images, metadata)
-            new_mask_stack, new_metadata = stack_images(masks, metadata)
-            new_nmask_stack, new_metadata = stack_images(nmasks, metadata)
-            new_class_stack, new_metadata = stack_images(classes, metadata)
+            new_image_stack, new_metadata = self.stack_images(images, metadata)
+            new_mask_stack, new_metadata = self.stack_images(masks, metadata)
+            new_nmask_stack, new_metadata = self.stack_images(nmasks, metadata)
+            new_class_stack, new_metadata = self.stack_images(classes, metadata)
 
             if len(new_mask_stack) == 0:
                 new_mask_stack = np.zeros(new_image_stack.shape, dtype=np.uint16)
@@ -1754,15 +1572,11 @@ class BacSeg(QWidget, _picasso_utils):
                     self.classLayer.metadata = new_metadata
 
                 else:
-                    from napari_bacseg._utils import append_image_stacks
 
-                    (appended_image_stack, appended_metadata,) = append_image_stacks(current_metadata, new_metadata, current_image_stack, new_image_stack, )
-
-                    (appended_mask_stack, appended_metadata,) = append_image_stacks(current_metadata, new_metadata, current_mask_stack, new_mask_stack, )
-
-                    (appended_nmask_stack, appended_metadata,) = append_image_stacks(current_metadata, new_metadata, current_nmask_stack, new_nmask_stack, )
-
-                    (appended_class_stack, appended_metadata,) = append_image_stacks(current_metadata, new_metadata, current_class_stack, new_class_stack, )
+                    (appended_image_stack, appended_metadata,) = self.append_image_stacks(current_metadata, new_metadata, current_image_stack, new_image_stack, )
+                    (appended_mask_stack, appended_metadata,) = self.append_image_stacks(current_metadata, new_metadata, current_mask_stack, new_mask_stack, )
+                    (appended_nmask_stack, appended_metadata,) = self.append_image_stacks(current_metadata, new_metadata, current_nmask_stack, new_nmask_stack, )
+                    (appended_class_stack, appended_metadata,) = self.append_image_stacks(current_metadata, new_metadata, current_class_stack, new_class_stack, )
 
                     self.viewer.layers.remove(self.viewer.layers[layer_name])
 
@@ -1819,7 +1633,7 @@ class BacSeg(QWidget, _picasso_utils):
         self.import_progressbar.reset()
         self.viewer.reset_view()
         self._autoClassify()
-        align_image_channels(self)
+        self.align_image_channels()
         self._autoContrast()
         self._updateScaleBar()
 
